@@ -1,0 +1,56 @@
+# Fork-only test workflow: builds MOOSE PorousFlow and runs its test suite.
+# Lives on the fork's default branch so it never appears in a PR branch.
+# Run it from the Actions tab and choose which branch to test.
+name: PorousFlow tests (fork)
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to test"
+        required: true
+        default: "porosity_min_base"
+
+jobs:
+  porous_flow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Check out the branch under test
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 1
+
+      - name: Set up conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          auto-activate-base: false
+
+      - name: Create MOOSE environment
+        run: |
+          conda config --add channels https://conda.software.inl.gov/public
+          conda create -y -n moose moose-dev=2026.08.23=mpich
+          conda activate moose
+          conda list | grep -i moose
+
+      - name: Build PorousFlow
+        run: |
+          conda activate moose
+          cd modules/porous_flow
+          make -j 4
+
+      - name: Run PorousFlow tests
+        run: |
+          conda activate moose
+          cd modules/porous_flow
+          ./run_tests -j 4
